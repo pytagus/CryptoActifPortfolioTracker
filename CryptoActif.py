@@ -11,7 +11,7 @@ class CryptoPortfolioApp:
         self.root.title("Crypto Portfolio Tracker")
         self.file_name = "portfolio_data.json"
         self.portfolio_data = self.load_data()
-        self.root.geometry("800x740")
+        self.root.geometry("1000x800")
         self.setup_layout()
         self.update_treeview()
 
@@ -28,23 +28,30 @@ class CryptoPortfolioApp:
         self.add_button = tk.Button(self.root, text="Add/Update Quantity", command=self.add_crypto)
         self.add_button.grid(row=2, column=0, columnspan=2)
 
+        self.update_location_button = tk.Button(self.root, text="Update Location", command=self.open_update_location_window)
+        self.update_location_button.grid(row=9, column=0, columnspan=2)
+
         self.delete_button = tk.Button(self.root, text="Delete Selected Crypto", command=self.delete_crypto)
         self.delete_button.grid(row=5, column=0, columnspan=2)
         self.update_prices_button = tk.Button(self.root, text="Update Prices", command=self.update_prices)
-        self.update_prices_button.grid(row=6, column=0, columnspan=2)
+        self.update_prices_button.grid(row=8, column=0, columnspan=2)
 
-        self.portfolio_tree = ttk.Treeview(self.root, columns=("Symbol", "Quantity", "Value ($)", "Total ($)"), show="headings", height=30)
-
+        self.portfolio_tree = ttk.Treeview(self.root, columns=("Symbol", "Quantity", "Value ($)", "Total ($)", "Location"), show="headings", height=30)
         self.portfolio_tree.grid(row=3, column=0, columnspan=2)
         self.portfolio_tree.heading("Symbol", text="Symbol")
         self.portfolio_tree.heading("Quantity", text="Quantity")
         self.portfolio_tree.heading("Value ($)", text="Value ($)")
         self.portfolio_tree.heading("Total ($)", text="Total ($)")
+        self.portfolio_tree.heading("Location", text="Location")
+
 
         self.portfolio_tree.bind("<Double-1>", self.on_item_double_click)
 
         self.total_label = tk.Label(self.root, text="Total Portfolio Value: $0")
         self.total_label.grid(row=4, column=0, columnspan=2)
+
+        self.progress = ttk.Progressbar(self.root, orient="horizontal", length=200, mode='determinate')
+        self.progress.grid(row=7, column=0, columnspan=2, pady=10)
 
 
     def load_data(self):
@@ -79,25 +86,80 @@ class CryptoPortfolioApp:
         self.update_treeview()  # Assurez-vous de mettre à jour l'affichage après ajout/modification
 
 
+    def open_update_location_window(self):
+        selected_item = self.portfolio_tree.selection()
+        if selected_item:
+            symbol = self.portfolio_tree.item(selected_item, 'values')[0].upper()
+            self.location_update_window = tk.Toplevel(self.root)
+            self.location_update_window.title(f"Update Location for {symbol}")
+    
+            tk.Label(self.location_update_window, text="New Location:").pack()
+            self.new_location_entry = tk.Entry(self.location_update_window)
+            self.new_location_entry.pack()
+    
+            update_button = tk.Button(self.location_update_window, text="Update Location",
+                                      command=lambda: self.update_location(symbol))
+            update_button.pack()
+        else:
+            print("Please select a cryptocurrency to update.")
+
+    def update_location(self, symbol):
+        new_location = self.new_location_entry.get()
+        if symbol in self.portfolio_data:
+            self.portfolio_data[symbol]['location'] = new_location
+        else:
+            print(f"Error: {symbol} not found in portfolio.")
+        self.save_data()
+        self.location_update_window.destroy()
+        self.update_treeview()
+
+
     def update_prices(self):
-        symbols = ','.join(self.portfolio_data.keys()).upper()
-        url = f"https://min-api.cryptocompare.com/data/pricemulti?fsyms={symbols}&tsyms=USD"
-        
-        try:
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                prices = response.json()
-                for symbol, data in self.portfolio_data.items():
-                    if symbol.upper() in prices:  # Utiliser des symboles en majuscules pour la correspondance
-                        new_price = prices[symbol.upper()]['USD']
-                        self.portfolio_data[symbol]['price'] = new_price  # Mise à jour du prix
-                        print(f"Mise à jour du prix pour {symbol}: {new_price}")  # Pour le débogage
-                self.save_data()
-                self.update_treeview()  # Mise à jour de l'affichage
-            else:
-                print(f"Réponse API non réussie: Statut {response.status_code}")
-        except requests.exceptions.RequestException as e:
-            print(f"Erreur lors de l'obtention des prix: {e}")
+        symbols_list = list(self.portfolio_data.keys())
+        if not symbols_list:
+            print("Aucun symbole à mettre à jour.")
+            return
+    
+        chunk_size = 10  # Ajustez selon la taille moyenne des symboles pour rester sous la limite de 300 caractères
+        total_chunks = len(symbols_list) // chunk_size + (1 if len(symbols_list) % chunk_size else 0)
+    
+        # Initialiser la barre de progression
+        self.progress['maximum'] = total_chunks
+        self.progress['value'] = 0
+    
+        for i in range(0, len(symbols_list), chunk_size):
+            # Sélection des symboles pour le chunk actuel
+            chunk_symbols = symbols_list[i:i+chunk_size]
+            symbols = ','.join(chunk_symbols).upper()
+            url = f"https://min-api.cryptocompare.com/data/pricemulti?fsyms={symbols}&tsyms=USD"
+            print(f"Updating prices for: {symbols}")
+            
+            try:
+                response = requests.get(url, timeout=5)
+                if response.status_code == 200:
+                    prices = response.json()
+                    if 'Response' in prices and prices['Response'] == 'Error':
+                        print(f"API Response Error: {prices['Message']}")
+                        continue  # Passe au prochain chunk si erreur
+                    for symbol in chunk_symbols:
+                        if symbol.upper() in prices:
+                            new_price = prices[symbol.upper()]['USD']
+                            self.portfolio_data[symbol]['price'] = new_price
+                            print(f"Updated price for {symbol}: {new_price}")
+                else:
+                    print(f"API Response unsuccessful: Status {response.status_code}")
+            except requests.exceptions.RequestException as e:
+                print(f"Error obtaining prices: {e}")
+            
+            # Mise à jour de la barre de progression après chaque chunk traité
+            self.progress['value'] += 1
+            self.root.update_idletasks()  # Force la mise à jour de l'UI pour refléter le changement
+    
+        self.save_data()
+        self.update_treeview()
+    
+        # Remise à zéro de la barre de progression à la fin
+        self.progress['value'] = 0
 
 
 
@@ -116,25 +178,20 @@ class CryptoPortfolioApp:
 
 
     def update_treeview(self):
-        # Efface tous les éléments existants dans le Treeview
         for i in self.portfolio_tree.get_children():
             self.portfolio_tree.delete(i)
-    
+        
         total_value = 0
-        # Création d'une liste à partir des éléments du portfolio pour les trier
         sorted_items = sorted(self.portfolio_data.items(), key=lambda item: item[1]['quantity'] * item[1]['price'], reverse=True)
-    
-        # Parcourt chaque élément trié du portfolio pour l'afficher
+        
         for symbol, data in sorted_items:
-            # Calcule le total pour chaque crypto
             total = data['price'] * data['quantity']
-            # Insère chaque crypto dans le Treeview avec le symbole en majuscules
-            self.portfolio_tree.insert("", tk.END, values=(symbol.upper(), data['quantity'], f"${data['price']:.2f}", f"${total:.2f}"))
-            # Calcule la valeur totale du portfolio
+            location = data.get('location', 'N/A')  # Récupère l'emplacement ou retourne 'N/A' si non spécifié
+            self.portfolio_tree.insert("", tk.END, values=(symbol.upper(), data['quantity'], f"${data['price']:.2f}", f"${total:.2f}", location))
             total_value += total
-    
-        # Met à jour l'affichage de la valeur totale du portfolio
+        
         self.total_label.config(text=f"Total Portfolio Value: ${total_value:.2f}")
+
 
 
     def update_quantity(self, symbol):
@@ -174,14 +231,16 @@ class CryptoPortfolioApp:
                                    command=lambda: self.update_quantity(symbol))
         confirm_button.pack()
 
-
     def get_crypto_price(self, symbol):
         # Notez que CryptoCompare utilise les symboles plutôt que les ID pour référencer les cryptomonnaies
         url = f"https://min-api.cryptocompare.com/data/price?fsym={symbol.upper()}&tsyms=USD"
+        print(f"Getting price for: {symbol}")
+        print(f"Request URL: {url}")
         try:
             response = requests.get(url, timeout=5)
             if response.status_code == 200:
                 data = response.json()
+                print(f"API Response: {data}")
                 if 'USD' in data:
                     return data['USD']
                 else:
@@ -197,8 +256,5 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = CryptoPortfolioApp(root)
     root.mainloop()
-
-
-
 
 
