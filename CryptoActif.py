@@ -11,7 +11,7 @@ class CryptoPortfolioApp:
         self.root.title("Crypto Portfolio Tracker")
         self.file_name = "portfolio_data.json"
         self.portfolio_data = self.load_data()
-        self.root.geometry("1000x800")
+        self.root.geometry("1000x830")
         self.setup_layout()
         self.update_treeview()
 
@@ -27,17 +27,14 @@ class CryptoPortfolioApp:
 
         self.add_button = tk.Button(self.root, text="Add/Update Quantity", command=self.add_crypto)
         self.add_button.grid(row=2, column=0, columnspan=2)
-
-        self.update_location_button = tk.Button(self.root, text="Update Location", command=self.open_update_location_window)
-        self.update_location_button.grid(row=9, column=0, columnspan=2)
-
-        self.delete_button = tk.Button(self.root, text="Delete Selected Crypto", command=self.delete_crypto)
-        self.delete_button.grid(row=5, column=0, columnspan=2)
-        self.update_prices_button = tk.Button(self.root, text="Update Prices", command=self.update_prices)
-        self.update_prices_button.grid(row=8, column=0, columnspan=2)
+        
+        tk.Label(self.root, text="Search Filter:").grid(row=3, column=0)
+        self.search_entry = tk.Entry(self.root)
+        self.search_entry.grid(row=3, column=1)
+        self.search_entry.bind('<KeyRelease>', self.filter_treeview)
 
         self.portfolio_tree = ttk.Treeview(self.root, columns=("Symbol", "Quantity", "Value ($)", "Total ($)", "Location"), show="headings", height=30)
-        self.portfolio_tree.grid(row=3, column=0, columnspan=2)
+        self.portfolio_tree.grid(row=4, column=0, columnspan=2)
         self.portfolio_tree.heading("Symbol", text="Symbol")
         self.portfolio_tree.heading("Quantity", text="Quantity")
         self.portfolio_tree.heading("Value ($)", text="Value ($)")
@@ -48,10 +45,19 @@ class CryptoPortfolioApp:
         self.portfolio_tree.bind("<Double-1>", self.on_item_double_click)
 
         self.total_label = tk.Label(self.root, text="Total Portfolio Value: $0")
-        self.total_label.grid(row=4, column=0, columnspan=2)
+        self.total_label.grid(row=5, column=0, columnspan=2)
+        
+        self.delete_button = tk.Button(self.root, text="Delete Selected Crypto", command=self.delete_crypto)
+        self.delete_button.grid(row=6, column=0, columnspan=2)
 
         self.progress = ttk.Progressbar(self.root, orient="horizontal", length=200, mode='determinate')
         self.progress.grid(row=7, column=0, columnspan=2, pady=10)
+        
+        self.update_prices_button = tk.Button(self.root, text="Update Prices", command=self.update_prices)
+        self.update_prices_button.grid(row=8, column=0, columnspan=2)
+        
+        self.update_location_button = tk.Button(self.root, text="Update Location", command=self.open_update_location_window)
+        self.update_location_button.grid(row=9, column=0, columnspan=2)
 
 
     def load_data(self):
@@ -84,6 +90,19 @@ class CryptoPortfolioApp:
             self.portfolio_data[symbol] = {'quantity': quantity, 'price': price}
         self.save_data()
         self.update_treeview()  # Assurez-vous de mettre à jour l'affichage après ajout/modification
+
+    def filter_treeview(self, event=None):
+        filter_term = self.search_entry.get().upper()  # Convertir le terme de recherche en majuscules pour la correspondance
+        for item in self.portfolio_tree.get_children():
+            item_values = self.portfolio_tree.item(item, 'values')
+            symbol, quantity, value_usd, total_usd, location = [str(v).upper() for v in item_values]
+            if filter_term in symbol or filter_term in location:
+                self.portfolio_tree.item(item, tags="match")
+            else:
+                self.portfolio_tree.item(item, tags="no_match")
+        self.portfolio_tree.tag_configure('match', background='white')
+        self.portfolio_tree.tag_configure('no_match', background='gray')
+        self.portfolio_tree.yview_moveto(0)  # Scroll to top of the treeview
 
 
     def open_update_location_window(self):
@@ -256,5 +275,8 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = CryptoPortfolioApp(root)
     root.mainloop()
+
+
+
 
 
