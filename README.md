@@ -13,6 +13,8 @@ This Crypto Portfolio Tracker is a desktop application built with Python's Tkint
 - **Location Tracking**: Users can specify and update the location where each cryptocurrency is stored (e.g., specific exchanges, wallets).
 - **Data Persistence**: Portfolio data is saved locally, ensuring that users don't lose their data between application sessions.
 
+![crypto portfolio tracker Picture](crypto_portfolio_tracker.png)
+
 ## How to Use
 
 ### Adding a New Cryptocurrency
